@@ -80,7 +80,7 @@
     const move = playersBook.moves.find(move => {
       i += move.games
       return choice < i
-    })
+    }) || playersBook.moves[-1]
     console.log({ playersBook, choice, move })
     game.move(move.san)
     updateStatus()
