@@ -195,11 +195,12 @@
     updateStatus()
   })
 
-  $('.js-next').click(() => {
+  $('.js-next').click(async () => {
+    const player = board.flip()
+    board.start(false)
     game.reset()
-    board.flip()
-    updateStatus()
-    playReply()
+    await updateStatus()
+    if( player == 'black') playReply()
   })
 </script>
 
