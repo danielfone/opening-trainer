@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opening Trainer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/bulma-prefers-dark" />
+  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+    integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU" crossorigin="anonymous">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"
+    integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2"
+    crossorigin="anonymous"></script>
+
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+    integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js"></script>
+</head>
+
+<body>
+  <section class="section">
+    <div class="container">
+      <h1 class="title">
+        Opening Trainer
+      </h1>
+      <p class="subtitle">
+        Train openings with <strong>brain science</strong>!
+      </p>
+      <button class="button is-light is-outlined is-small js-undo">Undo</button>
+      <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
+      <button class="button is-danger is-light is-outlined is-small js-reset">Reset</button>
+      <div id="board" style="width: 500px"></div>
+      <h2 id="opening-name">Starting position…</h2>
+      <label>Score:</label>
+      <div id="score"></div>
+      <label>Status:</label>
+      <div id="status"></div>
+      <label>FEN:</label>
+      <div id="fen"></div>
+      <label>PGN:</label>
+      <div id="pgn"></div>
+    </div>
+  </section>
+</body>
+<script>
+  var game = new Chess()
+  var $status = $('#status')
+  var $score = $('#score')
+  var $fen = $('#fen')
+  var $pgn = $('#pgn')
+  var $openingName = $('#opening-name')
+  var masterBook = null
+  var playersBook = null
+
+  function tallyMoves(book) {
+    book.games = book.white + book.draws + book.black
+    book.moves.forEach(move => {
+      move.games = move.white + move.draws + move.black
+      move.percentage = Math.round(move.games / book.games * 100)
+    })
+    return book
+  }
+
+  async function updateBook() {
+    const play = game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
+    const [masters, lichess] = await Promise.all([
+      fetch(`https://explorer.lichess.ovh/masters?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
+      fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
+    ])
+    $openingName.text(lichess.opening?.name || "Unknown opening")
+    playersBook = lichess
+    masterBook = masters
+  }
+
+  function playReply() {
+    const choice = Math.random() * playersBook.games
+    let i = 0
+    const move = playersBook.moves.find(move => {
+      i += move.games
+      return choice < i
+    })
+    console.log({ playersBook, choice, move })
+    game.move(move.san)
+    updateStatus()
+  }
+
+  function onDragStart(source, piece, position, orientation) {
+    // do not pick up pieces if the game is over
+    if (game.game_over()) return false
+
+    // only pick up pieces for the side to move
+    if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+      (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+      return false
+    }
+  }
+
+  function onDrop(source, target) {
+    // see if the move is legal
+    var move = game.move({
+      from: source,
+      to: target,
+      promotion: 'q' // NOTE: always promote to a queen for example simplicity
+    })
+
+    // illegal move
+    if (move === null) return 'snapback'
+
+    if (masterBook) {
+      const bookMove = masterBook.moves.find(m => m.san === move.san)
+
+      if (bookMove == null) {
+        $score.text("😱 Not in book!")
+        game.undo()
+        return "snapback"
+      } else {
+        const list = masterBook.moves.slice(0, 4).map(m => `${m.san}: ${m.percentage}%`).join(', ')
+        const popCost = masterBook.moves[0].percentage - bookMove.percentage
+        if (popCost == 0) {
+          prefix = '💯'
+        } else if (popCost < 20) {
+          prefix = '👍'
+        } else {
+          prefix = '🤦‍♂️'
+        }
+        $score.text(`${prefix} ${bookMove.percentage}% (${list})`)
+      }
+    }
+  }
+
+  // update the board position after the piece snap
+  // for castling, en passant, pawn promotion
+  async function onSnapEnd() {
+    await updateStatus()
+    playReply()
+  }
+
+  async function updateStatus() {
+    board.position(game.fen())
+    await updateBook()
+
+    var status = ''
+
+    var moveColor = 'White'
+    if (game.turn() === 'b') {
+      moveColor = 'Black'
+    }
+
+    // checkmate?
+    if (game.in_checkmate()) {
+      status = 'Game over, ' + moveColor + ' is in checkmate.'
+    }
+
+    // draw?
+    else if (game.in_draw()) {
+      status = 'Game over, drawn position'
+    }
+
+    // game still on
+    else {
+      status = moveColor + ' to move'
+
+      // check?
+      if (game.in_check()) {
+        status += ', ' + moveColor + ' is in check'
+      }
+    }
+
+    $status.html(status)
+    $fen.html(game.fen())
+    $pgn.html(game.pgn())
+  }
+
+  var config = {
+    draggable: true,
+    position: 'start',
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd
+  }
+  var board = Chessboard('board', config)
+
+  updateStatus()
+
+  $('.js-reset').click(() => {
+    game.reset()
+    updateStatus()
+  })
+
+  $('.js-undo').click(() => {
+    game.undo()
+    game.undo()
+    updateStatus()
+  })
+
+  $('.js-next').click(() => {
+    game.reset()
+    board.flip()
+    updateStatus()
+    playReply()
+  })
+</script>
+
+</html>
