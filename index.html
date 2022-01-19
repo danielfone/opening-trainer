@@ -30,13 +30,12 @@
       </p>
       <button class="button is-light is-outlined is-small js-undo">Undo</button>
       <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
-      <button class="button is-danger is-light is-outlined is-small js-reset">Reset</button>
+      <button class="button is-outlined is-small js-play">Play</button>
       <div id="board" style="width: 500px"></div>
-      <h2 id="opening-name">Starting position…</h2>
-      <label>Score:</label>
-      <div id="score"></div>
-      <label>Status:</label>
-      <div id="status"></div>
+      <div id="opening-name" class="title is-3">Starting position…</div>
+      <div id="opening-variant" class="subtitle is-5"></div>
+      <p id="status" class="has-text-grey"></p>
+      <div id="moves"></div>
       <label>FEN:</label>
       <div id="fen"></div>
       <label>PGN:</label>
@@ -47,12 +46,14 @@
 <script>
   var game = new Chess()
   var $status = $('#status')
-  var $score = $('#score')
+  var $moves = $('#moves')
+  var $eval = $('#eval')
   var $fen = $('#fen')
   var $pgn = $('#pgn')
   var $openingName = $('#opening-name')
   var masterBook = null
   var playersBook = null
+  var engineMoves = []
 
   function tallyMoves(book) {
     book.games = book.white + book.draws + book.black
@@ -63,18 +64,57 @@
     return book
   }
 
+  // chess.js generates standard FEN, whereas lichess (and many others) index
+  // positions via X-FEN. The key difference being the enpassant flag.
+  function xFen() {
+    const parts = game.fen().split(' ')
+    const enpassant = parts[3]
+    const canEnPassant = game.moves({ verbose: true }).some(m => m.flags === 'e')
+    if (!canEnPassant) {
+      parts[3] = '-'
+    }
+    return parts.join(' ')
+  }
+
   async function updateBook() {
     const play = game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
-    const [masters, lichess] = await Promise.all([
+    const [masters, lichess, a] = await Promise.all([
       fetch(`https://explorer.lichess.ovh/masters?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
       fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
+      fetch(`https://lichess.org/api/cloud-eval?multiPv=4&fen=${xFen()}`).then(r => r.json()),
     ])
-    $openingName.text(lichess.opening?.name || "Unknown opening")
+
+    // Awkward way to convert UCI from analysis variation into SAN
+    //
+    // FIXME: handle castling UCI. We should probably generate all the moves and
+    // then compare the line UCI against it
+    if (a.pvs) {
+      a.pvs.forEach(line => {
+        const uci = line.moves.slice(0, 4)
+        if (uci == 'e1h1' || uci == 'e8h8') {
+          line.san = 'O-O'
+        } else if (uci == 'e1a1' || uci == 'e8a8') {
+          line.san = 'O-O-O'
+        } else {
+          move = game.move(uci, { sloppy: true })
+          line.san = move.san
+          game.undo()
+        }
+      })
+      engineMoves = a.pvs
+    } else {
+      engineMoves = []
+    }
+
     playersBook = lichess
     masterBook = masters
   }
 
   function playReply() {
+    if (playersBook.games == 0) {
+      $status.text('Out of book!')
+      return
+    }
     const choice = Math.random() * playersBook.games
     let i = 0
     const move = playersBook.moves.find(move => {
@@ -97,6 +137,24 @@
     }
   }
 
+  function abbrNum(number) {
+    // what tier? (determines SI symbol)
+    var tier = Math.log10(Math.abs(number)) / 3 | 0;
+
+    // if zero, we don't need a suffix
+    if (tier == 0) return number;
+
+    // get suffix and determine scale
+    var suffix = "kMGTPE".charAt(tier);
+    var scale = Math.pow(10, tier * 3);
+
+    // scale the number
+    var scaled = number / scale;
+
+    // format number and add suffix
+    return scaled.toFixed(1) + suffix;
+  }
+
   function onDrop(source, target) {
     // see if the move is legal
     var move = game.move({
@@ -108,25 +166,23 @@
     // illegal move
     if (move === null) return 'snapback'
 
-    if (masterBook) {
-      const bookMove = masterBook.moves.find(m => m.san === move.san)
+    // TODO: calculate loss vs master, players, engine
+    const selectedClass = 'has-text-info has-background-info-light'
+    const engineList = engineMoves.map((m, i) => `
+      <th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th>
+      <td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>
+    `).join('')
 
-      if (bookMove == null) {
-        $score.text("😱 Not in book!")
-        game.undo()
-        return "snapback"
-      } else {
-        const list = masterBook.moves.slice(0, 4).map(m => `${m.san}: ${m.percentage}%`).join(', ')
-        const popCost = masterBook.moves[0].percentage - bookMove.percentage
-        if (popCost == 0) {
-          prefix = '💯'
-        } else if (popCost < 20) {
-          prefix = '👍'
-        } else {
-          prefix = '🤦‍♂️'
-        }
-        $score.text(`${prefix} ${bookMove.percentage}% (${list})`)
-      }
+    if (masterBook) {
+      const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
+      const playerList = playersBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
+      $moves.html(`
+        <table class="table is-narrow">
+          <tr><th>M:<span class="tag">${abbrNum(masterBook.games)}</span></th>${masterList}</tr>
+          <tr><th>A:<span class="tag">${abbrNum(playersBook.games)}</span></th>${playerList}</tr>
+          <tr><th>E:</th></td>${engineList}</tr>
+        </table>
+      `)
     }
   }
 
@@ -168,6 +224,17 @@
       }
     }
 
+    if (game.history().length > 0) {
+      const [openingName, variant] = masterBook.opening?.name.split(': ')
+
+      $openingName.html(openingName || "Unknown opening")
+      if (variant) $('#opening-variant').text(variant)
+    } else {
+      $openingName.html("Starting position")
+      $('#opening-variant').html("")
+
+    }
+
     $status.html(status)
     $fen.html(game.fen())
     $pgn.html(game.pgn())
@@ -184,23 +251,23 @@
 
   updateStatus()
 
-  $('.js-reset').click(() => {
-    game.reset()
-    updateStatus()
+  $('.js-undo').click(async () => {
+    game.undo()
+    game.undo()
+    await updateStatus()
   })
 
-  $('.js-undo').click(() => {
-    game.undo()
-    game.undo()
-    updateStatus()
+  $('.js-play').click(async () => {
+    playReply()
   })
 
   $('.js-next').click(async () => {
     const player = board.flip()
     board.start(false)
+    $moves.html('')
     game.reset()
     await updateStatus()
-    if( player == 'black') playReply()
+    if (player == 'black') playReply()
   })
 </script>
 
