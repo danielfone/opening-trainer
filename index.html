@@ -50,6 +50,7 @@
         </div>
         <div class="column">
           <div id="moves"></div>
+          <ul class="js-positions"></ul>
         </div>
       </div>
     </div>
@@ -63,9 +64,11 @@
   var $fen = $('#fen')
   var $pgn = $('#pgn')
   var $openingName = $('#opening-name')
+  var bookPGN = null
   var masterBook = null
   var playersBook = null
   var engineMoves = []
+  var positionSchedule = JSON.parse(localStorage.getItem('positionSchedule')) || {}
   var autoMove = null // Move computer just made
 
   function tallyMoves(book) {
@@ -90,6 +93,7 @@
   }
 
   async function updateBook() {
+    bookPGN = game.pgn()
     const play = game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
     const [masters, lichess, a] = await Promise.all([
       fetch(`https://explorer.lichess.ovh/masters?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
@@ -180,7 +184,7 @@
 
     const selectedClass = 'has-text-info'
 
-    if (masterBook) {
+    if (bookPGN) {
       const masterLoss = masterBook.moves.length > 0 ? masterBook.moves[0].percentage - (masterBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
       const playerLoss = playersBook.moves.length > 0 ? playersBook.moves[0].percentage - (playersBook.moves.find(m => m.san == move.san)?.percentage || 0)  : '-'
@@ -190,12 +194,23 @@
       const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length-1].cp) / 100).toFixed(1)) : '-'
       $moves.html(`
         <table class="table is-narrow">
+          <tr><td colspan="10">${bookPGN}<a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-warning is-small" style="float:right">Revise</a></td></tr>
           <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${masterLoss}%</td>${masterList}</tr>
           <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${playerLoss}%</td>${playerList}</tr>
           <tr><th>Engine</th><td>${engineLoss}</td></td>${engineList}</tr>
         </table>
       `)
     }
+  }
+
+  function schedule(pgn, days) {
+    const when = new Date()
+    when.setDate(when.getDate() + days)
+    positionSchedule[pgn] = when.toDateString()
+    localStorage.setItem('positionSchedule', JSON.stringify(positionSchedule))
+
+    // Render updated schedule
+    $('.js-positions').append(`<li>${when}: ${pgn}</li>`)
   }
 
   // update the board position after the piece snap
@@ -261,6 +276,12 @@
     }
   }
 
+  async function undoPlayerMove() {
+    game.undo()
+    game.undo()
+    await updateStatus()
+  }
+
   var config = {
     draggable: true,
     position: 'start',
@@ -273,11 +294,7 @@
 
   updateStatus()
 
-  $('.js-undo').click(async () => {
-    game.undo()
-    game.undo()
-    await updateStatus()
-  })
+  $('.js-undo').click(undoPlayerMove)
 
   $('.js-play').click(async () => {
     playReply()
