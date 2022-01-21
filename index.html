@@ -34,18 +34,24 @@
       <p class="subtitle">
         Train openings with <strong>brain science</strong>!
       </p>
-      <button class="button is-light is-outlined is-small js-undo">Undo</button>
-      <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
-      <button class="button is-outlined is-small js-play">Play</button>
-      <div id="board" style="width: 500px"></div>
-      <div id="opening-name" class="title is-3">Starting position…</div>
-      <div id="opening-variant" class="subtitle is-5"></div>
-      <p id="status" class="has-text-grey"></p>
-      <div id="moves"></div>
-      <label>FEN:</label>
-      <div id="fen"></div>
-      <label>PGN:</label>
-      <div id="pgn"></div>
+      <div class="columns">
+        <div class="column">
+          <button class="button is-light is-outlined is-small js-undo">Undo</button>
+          <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
+          <button class="button is-outlined is-small js-play">Play</button>
+          <div id="board" style="width: 500px"></div>
+          <div id="opening-name" class="title is-3">Starting position…</div>
+          <div id="opening-variant" class="subtitle is-5"></div>
+          <p id="status" class="has-text-grey"></p>
+          <label>FEN:</label>
+          <div id="fen"></div>
+          <label>PGN:</label>
+          <div id="pgn"></div>
+        </div>
+        <div class="column">
+          <div id="moves"></div>
+        </div>
+      </div>
     </div>
   </section>
 </body>
