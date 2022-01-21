@@ -172,21 +172,21 @@
     // illegal move
     if (move === null) return 'snapback'
 
-    // TODO: calculate loss vs master, players, engine
-    const selectedClass = 'has-text-info has-background-info-light'
-    const engineList = engineMoves.map((m, i) => `
-      <th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th>
-      <td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>
-    `).join('')
+    const selectedClass = 'has-text-info'
 
     if (masterBook) {
+      const masterLoss = masterBook.moves.length > 0 ? masterBook.moves[0].percentage - (masterBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
+      const playerLoss = playersBook.moves.length > 0 ? playersBook.moves[0].percentage - (playersBook.moves.find(m => m.san == move.san)?.percentage || 0)  : '-'
       const playerList = playersBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
+      const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>`).join('')
+      const engineMove = engineMoves.find(m => m.san == move.san)
+      const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length-1].cp) / 100).toFixed(1)) : '-'
       $moves.html(`
         <table class="table is-narrow">
-          <tr><th>M:<span class="tag">${abbrNum(masterBook.games)}</span></th>${masterList}</tr>
-          <tr><th>A:<span class="tag">${abbrNum(playersBook.games)}</span></th>${playerList}</tr>
-          <tr><th>E:</th></td>${engineList}</tr>
+          <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${masterLoss}%</td>${masterList}</tr>
+          <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${playerLoss}%</td>${playerList}</tr>
+          <tr><th>Engine</th><td>${engineLoss}</td></td>${engineList}</tr>
         </table>
       `)
     }
