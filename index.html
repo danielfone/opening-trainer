@@ -17,6 +17,12 @@
     integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
     crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js"></script>
+
+  <style>
+    .move-highlight {
+      box-shadow: inset 0 0 5px 1px #5757a8;
+    }
+  </style>
 </head>
 
 <body>
@@ -54,6 +60,7 @@
   var masterBook = null
   var playersBook = null
   var engineMoves = []
+  var autoMove = null // Move computer just made
 
   function tallyMoves(book) {
     book.games = book.white + book.draws + book.black
@@ -121,8 +128,7 @@
       i += move.games
       return choice < i
     }) || playersBook.moves[-1]
-    console.log({ playersBook, choice, move })
-    game.move(move.san)
+    autoMove = game.move(move.san)
     updateStatus()
   }
 
@@ -240,12 +246,22 @@
     $pgn.html(game.pgn())
   }
 
+  function onMoveEnd() {
+    // Highlight computer move if it made one
+    $('#board').find('.square-55d63').removeClass('move-highlight')
+    if (autoMove) {
+      $('#board').find(`.square-${autoMove.from}`).addClass('move-highlight')
+      $('#board').find(`.square-${autoMove.to}`).addClass('move-highlight')
+    }
+  }
+
   var config = {
     draggable: true,
     position: 'start',
     onDragStart: onDragStart,
     onDrop: onDrop,
-    onSnapEnd: onSnapEnd
+    onSnapEnd: onSnapEnd,
+    onMoveEnd: onMoveEnd,
   }
   var board = Chessboard('board', config)
 
