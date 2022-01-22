@@ -69,7 +69,6 @@
   var playersBook = null
   var engineMoves = []
   var positionSchedule = JSON.parse(localStorage.getItem('positionSchedule')) || {}
-  var autoMove = null // Move computer just made
 
   function tallyMoves(book) {
     book.games = book.white + book.draws + book.black
@@ -92,7 +91,7 @@
     return parts.join(' ')
   }
 
-  async function updateBook() {
+  async function evaluatePosition() {
     bookPGN = game.pgn()
     const play = game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
     const [masters, lichess, a] = await Promise.all([
@@ -127,7 +126,7 @@
     masterBook = masters
   }
 
-  function playReply() {
+  async function playBookMove() {
     if (playersBook.games == 0) {
       $status.text('Out of book!')
       return
@@ -137,9 +136,9 @@
     const move = playersBook.moves.find(move => {
       i += move.games
       return choice < i
-    }) || playersBook.moves[-1]
-    autoMove = game.move(move.san)
-    updateStatus()
+    }) || playersBook.moves[playersBook.moves.length - 1]
+    game.move(move.san)
+    await updateStatus()
   }
 
   function onDragStart(source, piece, position, orientation) {
@@ -187,11 +186,11 @@
     if (bookPGN) {
       const masterLoss = masterBook.moves.length > 0 ? masterBook.moves[0].percentage - (masterBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
-      const playerLoss = playersBook.moves.length > 0 ? playersBook.moves[0].percentage - (playersBook.moves.find(m => m.san == move.san)?.percentage || 0)  : '-'
+      const playerLoss = playersBook.moves.length > 0 ? playersBook.moves[0].percentage - (playersBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const playerList = playersBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
       const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>`).join('')
       const engineMove = engineMoves.find(m => m.san == move.san)
-      const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length-1].cp) / 100).toFixed(1)) : '-'
+      const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length - 1].cp) / 100).toFixed(1)) : '-'
       $moves.html(`
         <table class="table is-narrow">
           <tr><td colspan="10">${bookPGN}<a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-warning is-small" style="float:right">Revise</a></td></tr>
@@ -220,65 +219,57 @@
     playReply()
   }
 
-  async function updateStatus() {
-    board.position(game.fen())
-    await updateBook()
+  // Update the UI with the game state
+  async function updateStatus(animate = true) {
+    console.debug('updateStatus')
+    board.position(game.fen(), animate)
 
-    var status = ''
+    $fen.html(game.fen())
+    $pgn.html(game.pgn())
 
-    var moveColor = 'White'
-    if (game.turn() === 'b') {
-      moveColor = 'Black'
+    // Highlight last move
+    $('#board').find('.square-55d63').removeClass('move-highlight')
+    const lastMove = game.history({ verbose: true }).pop()
+    if (lastMove) {
+      $('#board').find(`.square-${lastMove.from}`).addClass('move-highlight')
+      $('#board').find(`.square-${lastMove.to}`).addClass('move-highlight')
     }
+
+    const moveColor = game.turn() === 'b' ? 'Black' : 'White'
 
     // checkmate?
-    if (game.in_checkmate()) {
-      status = 'Game over, ' + moveColor + ' is in checkmate.'
-    }
+    if (game.in_checkmate()) return $status.text(`Game over, ${moveColor} is in checkmate.`)
 
     // draw?
-    else if (game.in_draw()) {
-      status = 'Game over, drawn position'
-    }
+    if (game.in_draw()) return $status.text('Game over, drawn position')
 
     // game still on
-    else {
-      status = moveColor + ' to move'
+    $status.text("Evaluating…")
+    await evaluatePosition()
 
-      // check?
-      if (game.in_check()) {
-        status += ', ' + moveColor + ' is in check'
-      }
+    // check?
+    if (game.in_check()) {
+      $status.text(`Check, ${moveColor} to move`)
+    } else {
+      $status.text(`${moveColor} to move`)
     }
 
     if (game.history().length > 0) {
-      const [openingName, variant] = masterBook.opening?.name.split(': ')
+      const [openingName, variant] = masterBook.opening.name.split(': ')
 
       $openingName.html(openingName || "Unknown opening")
       if (variant) $('#opening-variant').text(variant)
     } else {
       $openingName.html("Starting position")
       $('#opening-variant').html("")
-
     }
 
-    $status.html(status)
-    $fen.html(game.fen())
-    $pgn.html(game.pgn())
-  }
-
-  function onMoveEnd() {
-    // Highlight computer move if it made one
-    $('#board').find('.square-55d63').removeClass('move-highlight')
-    if (autoMove) {
-      $('#board').find(`.square-${autoMove.from}`).addClass('move-highlight')
-      $('#board').find(`.square-${autoMove.to}`).addClass('move-highlight')
-    }
+    if (game.turn() != board.orientation().charAt(0)) playBookMove()
   }
 
   async function undoPlayerMove() {
     game.undo()
-    game.undo()
+    if (game.turn() !== board.orientation().charAt(0)) game.undo()
     await updateStatus()
   }
 
@@ -288,25 +279,20 @@
     onDragStart: onDragStart,
     onDrop: onDrop,
     onSnapEnd: onSnapEnd,
-    onMoveEnd: onMoveEnd,
   }
   var board = Chessboard('board', config)
-
-  updateStatus()
 
   $('.js-undo').click(undoPlayerMove)
 
   $('.js-play').click(async () => {
-    playReply()
+    playBookMove()
   })
 
   $('.js-next').click(async () => {
     const player = board.flip()
-    board.start(false)
     $moves.html('')
     game.reset()
-    await updateStatus()
-    if (player == 'black') playReply()
+    await updateStatus(false)
   })
 </script>
 
