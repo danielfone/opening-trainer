@@ -36,6 +36,7 @@
       </p>
       <div class="columns">
         <div class="column">
+          <button class="button is-primary is-outlined is-small js-review" disabled="disabled">Review</button>
           <button class="button is-light is-outlined is-small js-undo">Undo</button>
           <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
           <button class="button is-outlined is-small js-play">Play</button>
@@ -69,6 +70,25 @@
   var playersBook = null
   var engineMoves = []
   var positionSchedule = JSON.parse(localStorage.getItem('positionSchedule')) || {}
+
+  // Convert JSON dates into real dates
+  for (const pgn in positionSchedule) {
+    const schedule = positionSchedule[pgn]
+    schedule.date = new Date(schedule.date)
+  }
+
+  function updateReviewButton() {
+    const today = (new Date()).setHours(0, 0, 0, 0)
+    const positionsDueToday = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0,0,0,0) <= today).length
+    $('.js-review').text(`Review (${positionsDueToday})`)
+    if (positionsDueToday > 0) {
+      $('.js-review').removeAttr('disabled')
+    } else {
+      $('.js-review').attr('disabled', 'disabled')
+    }
+  }
+
+  updateReviewButton()
 
   function tallyMoves(book) {
     book.games = book.white + book.draws + book.black
@@ -191,9 +211,29 @@
       const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>`).join('')
       const engineMove = engineMoves.find(m => m.san == move.san)
       const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length - 1].cp) / 100).toFixed(1)) : '-'
+
+      if (positionSchedule[bookPGN]) {
+        if (positionSchedule[bookPGN].interval == 0) {
+          buttons = `
+            <a href="javascript:schedule('${bookPGN}', 1);" class="button is-success is-small">Ok</a>
+            <a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-danger is-small">Relearn</a>
+          `
+        } else {
+          let easyInt = Math.ceil(positionSchedule[bookPGN].interval * 1.5)
+          let hardInt = Math.ceil(positionSchedule[bookPGN].interval * 0.5)
+          buttons = `
+            <a href="javascript:schedule('${bookPGN}', ${easyInt});" class="button is-success is-small">Easy (${easyInt}d)</a>
+            <a href="javascript:schedule('${bookPGN}', ${hardInt});" class="button is-warning is-small">Hard (${hardInt}d)</a>
+            <a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-danger is-small">Relearn</a>
+          `
+        }
+      } else {
+        buttons = `<a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-danger is-small">Learn</a>`
+      }
+
       $moves.html(`
         <table class="table is-narrow">
-          <tr><td colspan="10">${bookPGN}<a href="javascript:schedule('${bookPGN}', 0);undoPlayerMove()" class="button is-warning is-small" style="float:right">Revise</a></td></tr>
+          <tr><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
           <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${masterLoss}%</td>${masterList}</tr>
           <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${playerLoss}%</td>${playerList}</tr>
           <tr><th>Engine</th><td>${engineLoss}</td></td>${engineList}</tr>
@@ -205,18 +245,19 @@
   function schedule(pgn, days) {
     const when = new Date()
     when.setDate(when.getDate() + days)
-    positionSchedule[pgn] = when.toDateString()
+    positionSchedule[pgn] = { interval: days, date: when, pgn: pgn }
     localStorage.setItem('positionSchedule', JSON.stringify(positionSchedule))
 
     // Render updated schedule
-    $('.js-positions').append(`<li>${when}: ${pgn}</li>`)
+    updateReviewButton()
+    $('.js-schedule-buttons').hide()
+    // $('.js-positions').append(`<li>${when}: ${pgn}</li>`)
   }
 
   // update the board position after the piece snap
   // for castling, en passant, pawn promotion
   async function onSnapEnd() {
     await updateStatus()
-    playReply()
   }
 
   // Update the UI with the game state
@@ -293,6 +334,16 @@
     $moves.html('')
     game.reset()
     await updateStatus(false)
+  })
+
+  $('.js-review').click(() => {
+    const schedule = Object.values(positionSchedule).sort((s1, s2) => s1.date - s2.date)[0]
+    console.log("Reviewing", schedule)
+    game.reset()
+    game.load_pgn(schedule.pgn)
+    board.orientation(game.turn() == 'w' ? 'white' : 'black')
+    $moves.html('')
+    updateStatus(false)
   })
 </script>
 
