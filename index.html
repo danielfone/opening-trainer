@@ -36,6 +36,7 @@
       </p>
       <div class="columns">
         <div class="column is-5">
+          <div class="js-due-tomorrow"></div>
           <button class="button is-primary is-outlined is-small js-review" disabled="disabled">Review</button>
           <button class="button is-light is-outlined is-small js-undo">Undo</button>
           <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
@@ -51,7 +52,6 @@
         </div>
         <div class="column">
           <div id="moves"></div>
-          <div class="js-due-tomorrow"></div>
           <ul class="js-positions"></ul>
         </div>
       </div>
@@ -81,8 +81,8 @@
   function updateReviewButton() {
     const today = (new Date()).setHours(0, 0, 0, 0)
     const tomorrow = today + 24 * 60 * 60 * 1000
-    const positionsDueToday = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0,0,0,0) <= today).length
-    const positionsDueTomorrow = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0,0,0,0) == tomorrow).length
+    const positionsDueToday = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0, 0, 0, 0) <= today).length
+    const positionsDueTomorrow = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0, 0, 0, 0) == tomorrow).length
     $('.js-review').text(`Review (${positionsDueToday})`)
     if (positionsDueToday > 0) {
       $('.js-review').removeAttr('disabled')
