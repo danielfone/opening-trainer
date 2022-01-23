@@ -208,13 +208,9 @@
     const selectedClass = 'has-text-info'
 
     if (bookPGN) {
-      const masterLoss = masterBook.moves.length > 0 ? masterBook.moves[0].percentage - (masterBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
-      const playerLoss = playersBook.moves.length > 0 ? playersBook.moves[0].percentage - (playersBook.moves.find(m => m.san == move.san)?.percentage || 0) : '-'
       const playerList = playersBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
       const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>`).join('')
-      const engineMove = engineMoves.find(m => m.san == move.san)
-      const engineLoss = engineMoves.length > 0 ? (engineMove ? ((engineMoves[0].cp - engineMove.cp) / 100).toFixed(1) : '>' + ((engineMoves[0].cp - engineMoves[engineMoves.length - 1].cp) / 100).toFixed(1)) : '-'
 
       if (positionSchedule[bookPGN]) {
         if (positionSchedule[bookPGN].interval == 0) {
@@ -238,11 +234,46 @@
       $moves.html(`
         <table class="table is-narrow">
           <tr><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
-          <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${masterLoss}%</td>${masterList}</tr>
-          <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${playerLoss}%</td>${playerList}</tr>
-          <tr><th>Engine</th><td>${engineLoss}</td></td>${engineList}</tr>
+          <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${renderBookLoss(masterBook, move)}</td>${masterList}</tr>
+          <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${renderBookLoss(playersBook, move)}</td>${playerList}</tr>
+          <tr><th>Engine</th><td>${renderEngineLoss(move)}</td></td>${engineList}</tr>
         </table>
       `)
+    }
+  }
+
+  function renderEngineLoss(move) {
+    if (engineMoves.length == 0) return '-'
+
+    const engineMove = engineMoves.find(m => m.san == move.san)
+    const loss = (engineMoves[0].cp - (engineMove || engineMoves[engineMoves.length - 1]).cp)
+    const prefix = !engineMove ? '>' : ''
+
+    if (Math.abs(loss) == 0) {
+      reaction = '💯'
+    } else if (Math.abs(loss) >= 300) { // Blundered a piece
+      reaction = '😱'
+    } else if (Math.abs(loss) >= 100) { // Blundered a pawn
+      reaction = ' 🤦‍♂️'
+    } else {
+      reaction = ''
+    }
+    return `${prefix}${(loss / 100).toFixed(1)} ${reaction}`
+  }
+
+  function renderBookLoss(book, move) {
+    if (book.games < 100) return '~'
+
+    const loss = book.moves[0].percentage - (book.moves.find(m => m.san == move.san)?.percentage || 0)
+
+    if (loss == 0) {
+      return `${loss}% 💯 `
+    } else if (loss > 75) {
+      return `${loss}% 😱`
+    } else if (loss > 35) {
+      return `${loss}% 🤦‍♂️`
+    } else {
+      return loss + '%'
     }
   }
 
