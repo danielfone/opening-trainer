@@ -51,6 +51,7 @@
         </div>
         <div class="column">
           <div id="moves"></div>
+          <div class="js-due-tomorrow"></div>
           <ul class="js-positions"></ul>
         </div>
       </div>
@@ -79,13 +80,16 @@
 
   function updateReviewButton() {
     const today = (new Date()).setHours(0, 0, 0, 0)
+    const tomorrow = today + 24 * 60 * 60 * 1000
     const positionsDueToday = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0,0,0,0) <= today).length
+    const positionsDueTomorrow = Object.values(positionSchedule).filter(s => (new Date(s.date)).setHours(0,0,0,0) == tomorrow).length
     $('.js-review').text(`Review (${positionsDueToday})`)
     if (positionsDueToday > 0) {
       $('.js-review').removeAttr('disabled')
     } else {
       $('.js-review').attr('disabled', 'disabled')
     }
+    $('.js-due-tomorrow').html(`${positionsDueTomorrow} position(s) due tomorrow.`)
   }
 
   updateReviewButton()
