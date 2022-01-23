@@ -299,7 +299,7 @@
       const [openingName, variant] = masterBook.opening.name.split(': ')
 
       $openingName.html(openingName || "Unknown opening")
-      if (variant) $('#opening-variant').text(variant)
+      $('#opening-variant').text(variant)
     } else {
       $openingName.html("Starting position")
       $('#opening-variant').html("")
