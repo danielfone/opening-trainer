@@ -38,17 +38,23 @@
         <div class="column is-5">
           <div class="js-due-tomorrow"></div>
           <button class="button is-primary is-outlined is-small js-review" disabled="disabled">Review</button>
-          <button class="button is-light is-outlined is-small js-undo">Undo</button>
           <button class="button is-primary is-light is-outlined is-small js-next">Next</button>
+          <button class="button is-light is-outlined is-small js-undo">Undo</button>
           <button class="button is-outlined is-small js-play">Play</button>
           <div id="board"></div>
+          <p id="status" class="has-text-grey"></p>
           <div id="opening-name" class="title is-3">Starting position…</div>
           <div id="opening-variant" class="subtitle is-5"></div>
-          <p id="status" class="has-text-grey"></p>
-          <label>FEN:</label>
-          <div id="fen"></div>
-          <label>PGN:</label>
-          <div id="pgn"></div>
+          <p>
+            <span id="pgn"></span>
+            <span id="next-moves" class="has-text-grey"></span>
+          </p>
+          <div class="field">
+            <div class="control">
+              <input id="fen" class="input" type="text" readonly>
+            </div>
+            <p class="help">FEN</p>
+          </div>
         </div>
         <div class="column">
           <div id="moves"></div>
@@ -115,12 +121,16 @@
     return parts.join(' ')
   }
 
+  const gameUCI = () => game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
+
   async function evaluatePosition() {
+    const oldStatus = $status.text()
+    $status.text("Evaluating…")
+
     bookPGN = game.pgn()
-    const play = game.history({ verbose: true }).map(move => `${move.from}${move.to}`).join(',')
     const [masters, lichess, a] = await Promise.all([
-      fetch(`https://explorer.lichess.ovh/masters?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
-      fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${play}`).then(r => r.json()).then(tallyMoves),
+      fetch(`https://explorer.lichess.ovh/masters?topGames=0&play=${gameUCI()}`).then(r => r.json()).then(tallyMoves),
+      fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${gameUCI()}`).then(r => r.json()).then(tallyMoves),
       fetch(`https://lichess.org/api/cloud-eval?multiPv=4&fen=${xFen()}`).then(r => r.json()),
     ])
 
@@ -146,28 +156,47 @@
       engineMoves = []
     }
 
+    if (game.history().length > 0) {
+      const [openingName, variant] = masters.opening.name.split(': ')
+
+      $openingName.html(openingName || "Unknown opening")
+      $('#opening-variant').text(variant)
+    } else {
+      $openingName.html("Starting position")
+      $('#opening-variant').html("")
+    }
+
     playersBook = lichess
     masterBook = masters
+    $status.text(oldStatus)
   }
 
   async function playBookMove() {
-    if (playersBook.games == 0) {
+    const oldStatus = $status.text()
+    $status.text("Choosing move…")
+
+    const book = await fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${gameUCI()}`).then(r => r.json()).then(tallyMoves)
+
+    if (book.games == 0) {
       $status.text('Out of book!')
       return
     }
-    const choice = Math.random() * playersBook.games
+    const choice = Math.random() * book.games
     let i = 0
-    const move = playersBook.moves.find(move => {
+    const move = book.moves.find(move => {
       i += move.games
       return choice < i
-    }) || playersBook.moves[playersBook.moves.length - 1]
+    }) || book.moves[book.moves.length - 1]
     game.move(move.san)
-    await updateStatus()
+    updateUI()
+    if (!game.game_over()) await evaluatePosition()
   }
 
   function onDragStart(source, piece, position, orientation) {
+    console.debug('onDragStart', { source, piece, position, orientation })
     // do not pick up pieces if the game is over
     if (game.game_over()) return false
+    if (nextMoves.length > 0) return false
 
     // only pick up pieces for the side to move
     if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
@@ -195,6 +224,7 @@
   }
 
   function onDrop(source, target) {
+    console.debug('onDrop', { source, target })
     // see if the move is legal
     var move = game.move({
       from: source,
@@ -281,6 +311,7 @@
   }
 
   function schedule(pgn, days) {
+    console.log("Rescheduling:", { days, pgn })
     const when = new Date()
     when.setDate(when.getDate() + days)
     positionSchedule[pgn] = { interval: days, date: when, pgn: pgn }
@@ -294,17 +325,27 @@
 
   // update the board position after the piece snap
   // for castling, en passant, pawn promotion
-  async function onSnapEnd() {
-    await updateStatus()
+  function onSnapEnd() {
+    updateUI()
+    if (!game.game_over()) playBookMove()
   }
 
   // Update the UI with the game state
-  async function updateStatus(animate = true) {
-    console.debug('updateStatus')
+  function updateUI(animate = true) {
     board.position(game.fen(), animate)
 
-    $fen.html(game.fen())
+    if (nextMoves.length > 0) {
+      $('.js-undo, .js-play').attr('disabled', 'disabled')
+    } else {
+      $('.js-undo, .js-play').removeAttr('disabled')
+    }
+
+    $fen.val(game.fen())
     $pgn.html(game.pgn())
+    let turn = Math.ceil(game.history().length / 2)
+    $('#next-moves').html(
+      nextMoves.map((m, i) => m.color == 'w' ? `${turn += 1}. ${m.san}` : m.san).join(' ')
+    )
 
     // Highlight last move
     $('#board').find('.square-55d63').removeClass('move-highlight')
@@ -322,34 +363,19 @@
     // draw?
     if (game.in_draw()) return $status.text('Game over, drawn position')
 
-    // game still on
-    $status.text("Evaluating…")
-    await evaluatePosition()
-
     // check?
     if (game.in_check()) {
       $status.text(`Check, ${moveColor} to move`)
     } else {
       $status.text(`${moveColor} to move`)
     }
-
-    if (game.history().length > 0) {
-      const [openingName, variant] = masterBook.opening.name.split(': ')
-
-      $openingName.html(openingName || "Unknown opening")
-      $('#opening-variant').text(variant)
-    } else {
-      $openingName.html("Starting position")
-      $('#opening-variant').html("")
-    }
-
-    if (game.turn() != board.orientation().charAt(0)) playBookMove()
   }
 
   async function undoPlayerMove() {
     game.undo()
     if (game.turn() !== board.orientation().charAt(0)) game.undo()
-    await updateStatus()
+    updateUI()
+    await evaluatePosition()
   }
 
   var config = {
@@ -361,6 +387,14 @@
   }
   var board = Chessboard('board', config)
 
+  function resetGame() {
+    $moves.html('')
+    game.reset()
+    nextMoves.splice(0, nextMoves.length) // clear array
+    bookPGN = null
+    updateUI(false)
+  }
+
   $('.js-undo').click(undoPlayerMove)
 
   $('.js-play').click(async () => {
@@ -369,19 +403,61 @@
 
   $('.js-next').click(async () => {
     const player = board.flip()
-    $moves.html('')
-    game.reset()
-    await updateStatus(false)
+    resetGame()
+    if (game.turn() != board.orientation().charAt(0)) playBookMove()
   })
 
-  $('.js-review').click(() => {
+  $('.js-review').click(async () => {
     const schedule = Object.values(positionSchedule).sort((s1, s2) => s1.date - s2.date)[0]
     console.log("Reviewing", schedule)
-    game.reset()
+    resetGame()
     game.load_pgn(schedule.pgn)
     board.orientation(game.turn() == 'w' ? 'white' : 'black')
-    $moves.html('')
-    updateStatus(false)
+    await evaluatePosition()
+    onDownKey()
+  })
+
+  const nextMoves = []
+
+  function onDownKey(event) {
+    game.history({verbose: true}).reverse().forEach(m => nextMoves.unshift(m))
+    game.reset()
+    updateUI(false)
+  }
+
+  function onUpKey() {
+    nextMoves.forEach(m => game.move(m))
+    nextMoves.splice(0, nextMoves.length) // clear array
+    updateUI(false)
+  }
+
+  function onLeftKey() {
+    const move = game.undo()
+    if (move) {
+      nextMoves.unshift(move)
+      updateUI()
+    }
+  }
+
+  function onRightKey() {
+    const move = nextMoves.shift()
+    if (move) {
+      game.move(move)
+      updateUI()
+    }
+  }
+
+  $(document).keydown((event) => {
+    const handler = ({
+      37: onLeftKey,
+      38: onUpKey,
+      39: onRightKey,
+      40: onDownKey,
+    })[event.which]
+    if (handler) {
+      handler()
+      event.preventDefault();
+    }
   })
 
   window.onresize = () => board.resize()
