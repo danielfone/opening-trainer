@@ -210,7 +210,7 @@
     if (bookPGN) {
       const masterList = masterBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
       const playerList = playersBook.moves.slice(0, 4).map(m => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.percentage}%</td>`).join('')
-      const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${(m.cp / 100).toFixed(1)}</td>`).join('')
+      const engineList = engineMoves.map((m, i) => `<th class="${m.san == move.san ? selectedClass : ''}">${m.san}</th><td class="${m.san == move.san ? selectedClass : ''}">${m.mate ? 'M' + m.mate : (m.cp / 100).toFixed(1)}</td>`).join('')
 
       if (positionSchedule[bookPGN]) {
         if (positionSchedule[bookPGN].interval == 0) {
@@ -246,6 +246,9 @@
     if (engineMoves.length == 0) return '-'
 
     const engineMove = engineMoves.find(m => m.san == move.san)
+    if (engineMoves[0].mate) {
+      return engineMove != engineMoves[0] ? 'M' + engineMoves[0].mate + ' 😱' : '🏆'
+    }
     const loss = (engineMoves[0].cp - (engineMove || engineMoves[engineMoves.length - 1]).cp)
     const prefix = !engineMove ? '>' : ''
 
