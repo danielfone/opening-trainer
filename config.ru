@@ -22,7 +22,10 @@ run lambda { |env|
   [
     200,
     {
-      'Content-Type' => 'application/json'
+      'Content-Type' => 'application/json',
+      'access-control-allow-origin' => '*',
+      'access-control-allow-methods' => 'GET,OPTIONS',
+      'access-control-allow-headers' => 'Accept,If-Modified-Since,Cache-Control,X-Requested-With',
     },
     [puzzle.to_json]
   ]
