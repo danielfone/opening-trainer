@@ -3,7 +3,6 @@
 #
 
 require "rack"
-require "csv"
 require "json"
 
 # The puzzle database is large, so we don't read it at boot time. Instead, when
