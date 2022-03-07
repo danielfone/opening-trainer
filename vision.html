@@ -74,6 +74,7 @@
   let checks = []
   let captures = []
   let moves = []
+  let targets = []
   const found = new Set()
   const mistakes = new Set()
 
@@ -90,10 +91,10 @@
     if (source === target) return
 
     console.debug('onDrop', { source, target })
-    // see if the move is legal
-    const move = moves.find(m => m.from === source && m.to === target)
+    // see if the move is in targets
+    const move = targets.find(m => m.from === source && m.to === target)
 
-    if (move?.san.indexOf('x') > 0) {
+    if (move) {
       if (!found.has(move)) $status.append(' ✅ ')
       found.add(move)
     } else {
@@ -106,10 +107,10 @@
 
   function onDone() {
     const time = (performance.now() - startTime) / 1000
-    const rate = time / (captures.length + 1)
+    const rate = time / (targets.length + 1)
     // TODO: account for mistakes
-    const percent = captures.length > 0 ? found.size / captures.length : 1
-    const missed = captures.filter(c => !found.has(c)).map(m => m.san)
+    const percent = targets.length > 0 ? found.size / targets.length : 1
+    const missed = targets.filter(c => !found.has(c)).map(m => m.san)
     const msg = percent == 1 ? 'Perfect!' : 'Oops.'
 
     // Update UI
@@ -126,12 +127,21 @@
 
   function onNext() {
     startTime = null
-    checks = null
-    captures = null
-    moves = null
     found.clear()
     mistakes.clear()
-    loadPosition()
+    if ( targets === checks ) {
+      startTime = performance.now()
+      targets = captures
+      $status.removeClass()
+      $status.addClass(game.turn())
+      $status.html(`Now find all the <b>captures</b>`)
+      $done.focus()
+    } else {
+      checks = null
+      captures = null
+      moves = null
+      loadPosition()
+    }
   }
 
   async function loadPosition() {
@@ -148,14 +158,15 @@
     game.load(puzzle.FEN)
     game.move(firstMove, { sloppy: true })
     moves = game.moves({ verbose: true })
-    checks = moves.filter(m => m.san.indexOf('+') > 0 || m.san.indexOf('#') > 0)
+    checks = moves.filter(m => m.san.search(/[#\+]$/) > 0)
     captures = moves.filter(m => m.san.indexOf('x') > 0)
     startTime = performance.now()
+    targets = checks
 
     // Update UI
-    $status.removeClass('loading')
+    $status.removeClass()
     $status.addClass(game.turn())
-    $status.text(`Find all the captures for ${game.turn() == 'w' ? 'White' : 'Black'}`)
+    $status.html(`Find all the <b>checks</b> for ${game.turn() == 'w' ? 'White' : 'Black'}`)
     $done.focus()
   }
 
