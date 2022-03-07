@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vision Trainer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/bulma-prefers-dark" />
+  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+    integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU" crossorigin="anonymous">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"
+    integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2"
+    crossorigin="anonymous"></script>
+
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+    integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js"></script>
+
+  <style>
+    html {
+      background: #ddd;
+    }
+
+    body {
+      margin: 0 auto;
+      max-width: 70vh;
+    }
+
+    #board {
+      margin: 2px;
+    }
+
+    #status {
+      padding: 1rem;
+    }
+
+    #status.w {
+      background: white;
+      color: #333;
+    }
+
+    #status.b {
+      background: #333;
+      color: #ccc;
+    }
+
+    #controls {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="board"></div>
+  <div id="status" class="loading">Loading</div>
+  <div id="controls" class="level">
+    <div class="level-item buttons">
+      <button class="button is-info-outline js-done">Done</button>
+      <button class="button is-info-outline js-next">Next</button>
+    </div>
+  </div>
+</body>
+<script>
+  let board
+  const game = new Chess()
+  const $done = $(".js-done")
+  const $next = $(".js-next")
+  const $status = $("#status")
+
+  // Game state
+  let startTime
+  let checks = []
+  let captures = []
+  let moves = []
+  let targets = []
+  const found = new Set()
+  const mistakes = new Set()
+
+  function onDragStart(source, piece, position, orientation) {
+    console.debug('onDragStart', { source, piece, position, orientation })
+    // only pick up pieces for the side to move
+    if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+      (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+      return false
+    }
+  }
+
+  function onDrop(source, target) {
+    if (source === target) return
+
+    console.debug('onDrop', { source, target })
+    // see if the move is in targets
+    const move = targets.find(m => m.from === source && m.to === target)
+
+    if (move) {
+      if (!found.has(move)) $status.append(' ✅ ')
+      found.add(move)
+    } else {
+      mistakes.add(move)
+      $status.append(' ❌ ')
+    }
+
+    return 'snapback';
+  }
+
+  function onDone() {
+    const time = (performance.now() - startTime) / 1000
+    const rate = time / (targets.length + 1)
+    // TODO: account for mistakes
+    const percent = targets.length > 0 ? found.size / targets.length : 1
+    const missed = targets.filter(c => !found.has(c)).map(m => m.san)
+    const msg = percent == 1 ? 'Perfect!' : 'Oops.'
+
+    // Update UI
+    $status.removeClass()
+    $status.addClass(percent == 1 ? 'has-background-success has-text-black-bis' : 'has-background-warning has-text-black-bis')
+    $status.html(`
+      ${msg}
+      ${percent.toLocaleString(undefined, { style: 'percent' })}<br>
+      ${rate.toLocaleString(undefined, { style: 'decimal' })} sec/move
+    `)
+    if (missed.length > 0) $status.append(`<br>Missed: ${missed.join(', ')}`)
+    if (percent == 1) $next.focus()
+  }
+
+  function onNext() {
+    startTime = null
+    found.clear()
+    mistakes.clear()
+    if ( targets === checks ) {
+      startTime = performance.now()
+      targets = captures
+      $status.removeClass()
+      $status.addClass(game.turn())
+      $status.html(`Now find all the <b>captures</b>`)
+      $done.focus()
+    } else {
+      checks = null
+      captures = null
+      moves = null
+      loadPosition()
+    }
+  }
+
+  async function loadPosition() {
+    // Update UI
+    $status.removeClass()
+    $status.addClass('loading')
+    $status.text("Getting puzzle…")
+
+    // Fetch puzzle and update game state
+    const puzzle = await fetch("https://opening-trainer.onrender.com/").then(r => r.json())
+    const firstMove = puzzle.Moves.split(" ")[0]
+    board.position(puzzle.FEN, false)
+    board.move(firstMove.slice(0, 2) + '-' + firstMove.slice(2, 4))
+    game.load(puzzle.FEN)
+    game.move(firstMove, { sloppy: true })
+    moves = game.moves({ verbose: true })
+    checks = moves.filter(m => m.san.search(/[#\+]$/) > 0)
+    captures = moves.filter(m => m.san.indexOf('x') > 0)
+    startTime = performance.now()
+    targets = checks
+
+    // Update UI
+    $status.removeClass()
+    $status.addClass(game.turn())
+    $status.html(`Find all the <b>checks</b> for ${game.turn() == 'w' ? 'White' : 'Black'}`)
+    $done.focus()
+  }
+
+  board = Chessboard('board', {
+    draggable: true,
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+  });
+
+  $done.click(onDone)
+  $next.click(onNext)
+
+  loadPosition()
+
+  window.onresize = () => board.resize()
+</script>
+
+</html>
