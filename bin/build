@@ -7,7 +7,7 @@ bundle install
 
 # Restore cached data
 echo "Checking cache"
-[ -d "${XDG_CACHE_HOME}/data" ] && cp "${XDG_CACHE_HOME}/data/*" data/
+[ -d "${XDG_CACHE_HOME}/data" ] && cp ${XDG_CACHE_HOME}/data/* data/
 
 # Download the puzzle db if we don't have it in the build
 [ -f "data/lichess_db_puzzle.csv" ] || curl https://database.lichess.org/lichess_db_puzzle.csv.bz2 | bunzip2 --verbose --stdout > data/lichess_db_puzzle.csv
