@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# exit on error
+set -o errexit
+
+# Update the bundle
+npm install
+
+# Restore cached data
+echo "Checking cache"
+[ -d "${XDG_CACHE_HOME}/data" ] && cp ${XDG_CACHE_HOME}/data/* data/
+
+# Download the puzzle db if we don't have it in the build
+[ -f "data/lichess_db_puzzle.csv" ] || curl https://database.lichess.org/lichess_db_puzzle.csv.bz2 | bunzip2 --verbose --stdout > data/lichess_db_puzzle.csv
+
+#
+# ALTERNATIVELY, for a more sophisticated approach...
+#
+
+# Fetch the puzzle db if a newer one exists
+# curl --time-cond data/lichess_db_puzzle.csv.bz2 --output data/lichess_db_puzzle.csv.bz2 https://database.lichess.org/lichess_db_puzzle.csv.bz2
+
+# Unzip the puzzles if we have a newer db
+# if [ "data/lichess_db_puzzle.csv" -ot "data/lichess_db_puzzle.csv.bz2" ]; then
+#   bunzip2 --verbose data/lichess_db_puzzle.csv.bz2
+# fi
+
+# Cache data dir
+echo "Caching artefacts"
+[ -d "${XDG_CACHE_HOME}" ] && mkdir -p "${XDG_CACHE_HOME}/data" && cp data/* ${XDG_CACHE_HOME}/data
