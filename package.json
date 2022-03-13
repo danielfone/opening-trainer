@@ -1,0 +1,22 @@
+{
+  "name": "opening-trainer",
+  "version": "1.0.0",
+  "description": "A simple opening explorer and trainer. WIP.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danielfone/opening-trainer.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/danielfone/opening-trainer/issues"
+  },
+  "homepage": "https://github.com/danielfone/opening-trainer#readme",
+  "dependencies": {
+    "express": "^4.17.3"
+  }
+}
