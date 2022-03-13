@@ -10,7 +10,7 @@ echo "Checking cache"
 [ -d "${XDG_CACHE_HOME}/data" ] && cp ${XDG_CACHE_HOME}/data/* data/
 
 # Download the puzzle db if we don't have it in the build
-[ -f "data/lichess_db_puzzle.csv" ] || curl https://database.lichess.org/lichess_db_puzzle.csv.bz2 | bunzip2 --verbose --stdout > data/lichess_db_puzzle.csv
+[ -f "data/lichess_db_puzzle.csv" ] || curl --verbose https://database.lichess.org/lichess_db_puzzle.csv.bz2 | bunzip2 --verbose --stdout > data/lichess_db_puzzle.csv
 
 #
 # ALTERNATIVELY, for a more sophisticated approach...
@@ -27,3 +27,5 @@ echo "Checking cache"
 # Cache data dir
 echo "Caching artefacts"
 [ -d "${XDG_CACHE_HOME}" ] && mkdir -p "${XDG_CACHE_HOME}/data" && cp data/* ${XDG_CACHE_HOME}/data
+
+echo "Done"
