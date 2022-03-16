@@ -165,7 +165,7 @@
     $status.html("<span>Getting puzzle…</span>")
 
     // Fetch puzzle and update game state
-    const puzzle = await fetch("https://opening-trainer.onrender.com/").then(r => r.json())
+    const puzzle = await fetch("https://dvdwhb2byr.us-east-1.awsapprunner.com/").then(r => r.json())
     const firstMove = puzzle.Moves.split(" ")[0]
     board.position(puzzle.FEN, false)
     board.move(firstMove.slice(0, 2) + '-' + firstMove.slice(2, 4))
