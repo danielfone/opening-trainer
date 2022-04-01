@@ -19,8 +19,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js"></script>
 
   <style>
-    .move-highlight {
-      box-shadow: inset 0 0 5px 1px #5757a8;
+    .move-highlight.black-3c85d,
+    .highlight1-32417.black-3c85d {
+      background-color: #DAC247;
+    }
+
+    .move-highlight.white-1e1d7,
+    .highlight1-32417.white-1e1d7 {
+      background-color: #F3E469;
+    }
+
+    .highlight1-32417, .highlight2-9c5d2 {
+      box-shadow: none;
+    }
+
+    .highlight2-9c5d2 {
+      border: 2px solid #5557;
+      box-sizing: border-box;
     }
   </style>
 </head>
