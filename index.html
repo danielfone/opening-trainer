@@ -73,6 +73,16 @@
           </div>
         </div>
         <div class="column">
+          <form>
+            <fieldset>
+              <legend>Autoplay</legend>
+              <label>
+                Threshold
+                <input name="threshold" type="number" max="100" min="0" step="1" size="3" value="0">%
+              </label>
+            </fieldset>
+          </form>
+
           <div id="moves"></div>
           <ul class="js-positions"></ul>
         </div>
@@ -93,6 +103,8 @@
   var playersBook = null
   var engineMoves = []
   var positionSchedule = JSON.parse(localStorage.getItem('positionSchedule')) || {}
+  const inputs = document.forms[0].elements
+
 
   // Convert JSON dates into real dates
   for (const pgn in positionSchedule) {
@@ -192,17 +204,25 @@
     $status.text("Choosing move…")
 
     const book = await fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${gameUCI()}`).then(r => r.json()).then(tallyMoves)
+    const threshold = +inputs.threshold.value
+    const candidates = book.moves.filter(m => m.percentage > threshold)
 
+    console.debug({candidates})
     if (book.games == 0) {
       $status.text('Out of book!')
       return
+    } else if (candidates.length == 0) {
+      $status.text(`No candidates found > ${threshold}%`)
+      return
     }
-    const choice = Math.random() * book.games
+
+    const remainingGames = candidates.reduce((t, m) => t + m.games, 0) // retally to account for missing moves
+    const choice = Math.random() * remainingGames
     let i = 0
-    const move = book.moves.find(move => {
+    const move = candidates.find(move => {
       i += move.games
       return choice < i
-    }) || book.moves[book.moves.length - 1]
+    }) || candidates[candidates.length - 1]
     game.move(move.san)
     updateUI()
     if (!game.game_over()) await evaluatePosition()
@@ -312,7 +332,6 @@
     return `<td style='min-width: 5rem; background:${color}'>${perc}</td>`
   }
 
-  function percentageToHsl(percentage, hue0=0, hue1=120) {
     var hue = (percentage * (hue1 - hue0)) + hue0;
     return 'hsl(' + hue + ', 60%, 40%)';
   }
