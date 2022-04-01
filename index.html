@@ -44,7 +44,7 @@
           <button class="button is-outlined is-small js-play">Play</button>
           <div id="board"></div>
           <p id="status" class="has-text-grey"></p>
-          <div id="opening-name" class="title is-3">Starting position…</div>
+          <div id="opening-name" class="title is-3">Starting position</div>
           <div id="opening-variant" class="subtitle is-5"></div>
           <p>
             <span id="pgn"></span>
@@ -249,11 +249,11 @@
       }
 
       $moves.html(`
-        <table class="table is-narrow">
-          <tr><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
-          <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${renderBookLoss(masterBook, move)}</td>${masterList}</tr>
-          <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${renderBookLoss(playersBook, move)}</td>${playerList}</tr>
-          <tr><th>Engine</th><td>${renderEngineLoss(move)}</td></td>${engineList}</tr>
+        <table class="table is-narrow has-text-right">
+          <tr class="has-text-left"><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
+          <tr><th class="has-text-left">Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th>${renderBookAccuracy(masterBook, move)}${masterList}</tr>
+          <tr><th class="has-text-left">All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th>${renderBookAccuracy(playersBook, move)}${playerList}</tr>
+          <tr><th class="has-text-left">Engine</th>${renderEngineLoss(move)}</td>${engineList}</tr>
         </table>
       `)
     }
@@ -264,37 +264,42 @@
 
     const engineMove = engineMoves.find(m => m.san == move.san)
     if (engineMoves[0].mate) {
-      return engineMove != engineMoves[0] ? 'M' + engineMoves[0].mate + ' 😱' : '🏆'
+      if (game.in_checkmate()) {
+        return `<td style="background:${percentageToHsl(100)}">🏆</td>`
+      } else if (engineMove?.mate) {
+        return `<td style="background:${percentageToHsl(50)}">M${engineMoves[0].mate}</td>`
+      } else {
+        return `<td style="background:${percentageToHsl(0)}">😱 M${engineMoves[0].mate}</td>`
+      }
     }
     const loss = (engineMoves[0].cp - (engineMove || engineMoves[engineMoves.length - 1]).cp)
     const prefix = !engineMove ? '>' : ''
+    const color = engineMove ? percentageToHsl(1 - (Math.abs(loss) / 100)) : '';
 
     if (Math.abs(loss) == 0) {
       reaction = '💯'
     } else if (Math.abs(loss) >= 300) { // Blundered a piece
       reaction = '😱'
     } else if (Math.abs(loss) >= 100) { // Blundered a pawn
-      reaction = ' 🤦‍♂️'
+      reaction = '🤦‍♂️'
     } else {
       reaction = ''
     }
-    return `${prefix}${(loss / 100).toFixed(1)} ${reaction}`
+    return `<td style='min-width: 5rem; background:${color}'>${prefix}${(loss / 100).toFixed(1)} ${reaction}</td>`
   }
 
-  function renderBookLoss(book, move) {
-    if (book.games < 100) return '~'
+  function renderBookAccuracy(book, move) {
+    if (book.games < 100) return '<td>🤷</td>'
 
-    const loss = book.moves[0].percentage - (book.moves.find(m => m.san == move.san)?.percentage || 0)
+    const accuracy = (book.moves.find(m => m.san == move.san)?.percentage || 0) / book.moves[0].percentage
+    const perc = accuracy.toLocaleString(undefined, { style: 'percent' })
+    const color = percentageToHsl(accuracy);
+    return `<td style='min-width: 5rem; background:${color}'>${perc}</td>`
+  }
 
-    if (loss == 0) {
-      return `${loss}% 💯 `
-    } else if (loss > 75) {
-      return `${loss}% 😱`
-    } else if (loss > 35) {
-      return `${loss}% 🤦‍♂️`
-    } else {
-      return loss + '%'
-    }
+  function percentageToHsl(percentage, hue0=0, hue1=120) {
+    var hue = (percentage * (hue1 - hue0)) + hue0;
+    return 'hsl(' + hue + ', 60%, 40%)';
   }
 
   function schedule(pgn, days) {
@@ -408,7 +413,7 @@
   const nextMoves = []
 
   function onDownKey(event) {
-    game.history({verbose: true}).reverse().forEach(m => nextMoves.unshift(m))
+    game.history({ verbose: true }).reverse().forEach(m => nextMoves.unshift(m))
     game.reset()
     updateUI(false)
   }
