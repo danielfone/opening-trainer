@@ -19,8 +19,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js"></script>
 
   <style>
-    .move-highlight {
-      box-shadow: inset 0 0 5px 1px #5757a8;
+    .move-highlight.black-3c85d,
+    .highlight1-32417.black-3c85d {
+      background-color: #DAC247;
+    }
+
+    .move-highlight.white-1e1d7,
+    .highlight1-32417.white-1e1d7 {
+      background-color: #F3E469;
+    }
+
+    .highlight1-32417, .highlight2-9c5d2 {
+      box-shadow: none;
+    }
+
+    .highlight2-9c5d2 {
+      border: 2px solid #5557;
+      box-sizing: border-box;
     }
   </style>
 </head>
@@ -44,7 +59,7 @@
           <button class="button is-outlined is-small js-play">Play</button>
           <div id="board"></div>
           <p id="status" class="has-text-grey"></p>
-          <div id="opening-name" class="title is-3">Starting position…</div>
+          <div id="opening-name" class="title is-3">Starting position</div>
           <div id="opening-variant" class="subtitle is-5"></div>
           <p>
             <span id="pgn"></span>
@@ -58,6 +73,16 @@
           </div>
         </div>
         <div class="column">
+          <form>
+            <fieldset>
+              <legend>Autoplay</legend>
+              <label>
+                Threshold
+                <input name="threshold" type="number" max="100" min="0" step="1" size="3" value="0">%
+              </label>
+            </fieldset>
+          </form>
+
           <div id="moves"></div>
           <ul class="js-positions"></ul>
         </div>
@@ -78,6 +103,8 @@
   var playersBook = null
   var engineMoves = []
   var positionSchedule = JSON.parse(localStorage.getItem('positionSchedule')) || {}
+  const inputs = document.forms[0].elements
+
 
   // Convert JSON dates into real dates
   for (const pgn in positionSchedule) {
@@ -177,17 +204,25 @@
     $status.text("Choosing move…")
 
     const book = await fetch(`https://explorer.lichess.ovh/lichess?topGames=0&play=${gameUCI()}`).then(r => r.json()).then(tallyMoves)
+    const threshold = +inputs.threshold.value
+    const candidates = book.moves.filter(m => m.percentage > threshold)
 
+    console.debug({candidates})
     if (book.games == 0) {
       $status.text('Out of book!')
       return
+    } else if (candidates.length == 0) {
+      $status.text(`No candidates found > ${threshold}%`)
+      return
     }
-    const choice = Math.random() * book.games
+
+    const remainingGames = candidates.reduce((t, m) => t + m.games, 0) // retally to account for missing moves
+    const choice = Math.random() * remainingGames
     let i = 0
-    const move = book.moves.find(move => {
+    const move = candidates.find(move => {
       i += move.games
       return choice < i
-    }) || book.moves[book.moves.length - 1]
+    }) || candidates[candidates.length - 1]
     game.move(move.san)
     updateUI()
     if (!game.game_over()) await evaluatePosition()
@@ -249,11 +284,11 @@
       }
 
       $moves.html(`
-        <table class="table is-narrow">
-          <tr><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
-          <tr><th>Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th><td>${renderBookLoss(masterBook, move)}</td>${masterList}</tr>
-          <tr><th>All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th><td>${renderBookLoss(playersBook, move)}</td>${playerList}</tr>
-          <tr><th>Engine</th><td>${renderEngineLoss(move)}</td></td>${engineList}</tr>
+        <table class="table is-narrow has-text-right">
+          <tr class="has-text-left"><td colspan="10">${bookPGN}<div class="js-schedule-buttons" style="float:right">${buttons}<div></td></tr>
+          <tr><th class="has-text-left">Masters<span class="tag" style="float:right">${abbrNum(masterBook.games)}</span></th>${renderBookAccuracy(masterBook, move)}${masterList}</tr>
+          <tr><th class="has-text-left">All<span class="tag" style="float:right">${abbrNum(playersBook.games)}</span></th>${renderBookAccuracy(playersBook, move)}${playerList}</tr>
+          <tr><th class="has-text-left">Engine</th>${renderEngineLoss(move)}</td>${engineList}</tr>
         </table>
       `)
     }
@@ -264,37 +299,42 @@
 
     const engineMove = engineMoves.find(m => m.san == move.san)
     if (engineMoves[0].mate) {
-      return engineMove != engineMoves[0] ? 'M' + engineMoves[0].mate + ' 😱' : '🏆'
+      if (game.in_checkmate()) {
+        return `<td style="background:${percentageToHsl(100)}">🏆</td>`
+      } else if (engineMove?.mate) {
+        return `<td style="background:${percentageToHsl(50)}">M${engineMoves[0].mate}</td>`
+      } else {
+        return `<td style="background:${percentageToHsl(0)}">😱 M${engineMoves[0].mate}</td>`
+      }
     }
     const loss = (engineMoves[0].cp - (engineMove || engineMoves[engineMoves.length - 1]).cp)
     const prefix = !engineMove ? '>' : ''
+    const color = engineMove ? percentageToHsl(1 - (Math.abs(loss) / 100)) : '';
 
     if (Math.abs(loss) == 0) {
       reaction = '💯'
     } else if (Math.abs(loss) >= 300) { // Blundered a piece
       reaction = '😱'
     } else if (Math.abs(loss) >= 100) { // Blundered a pawn
-      reaction = ' 🤦‍♂️'
+      reaction = '🤦‍♂️'
     } else {
       reaction = ''
     }
-    return `${prefix}${(loss / 100).toFixed(1)} ${reaction}`
+    return `<td style='min-width: 5rem; background:${color}'>${prefix}${(loss / 100).toFixed(1)} ${reaction}</td>`
   }
 
-  function renderBookLoss(book, move) {
-    if (book.games < 100) return '~'
+  function renderBookAccuracy(book, move) {
+    if (book.games < 100) return '<td>🤷</td>'
 
-    const loss = book.moves[0].percentage - (book.moves.find(m => m.san == move.san)?.percentage || 0)
+    const accuracy = (book.moves.find(m => m.san == move.san)?.percentage || 0) / book.moves[0].percentage
+    const perc = accuracy.toLocaleString(undefined, { style: 'percent' })
+    const color = percentageToHsl(accuracy);
+    return `<td style='min-width: 5rem; background:${color}'>${perc}</td>`
+  }
 
-    if (loss == 0) {
-      return `${loss}% 💯 `
-    } else if (loss > 75) {
-      return `${loss}% 😱`
-    } else if (loss > 35) {
-      return `${loss}% 🤦‍♂️`
-    } else {
-      return loss + '%'
-    }
+  function percentageToHsl(percentage, hue0 = 0, hue1 = 120) {
+    var hue = (percentage * (hue1 - hue0)) + hue0;
+    return 'hsl(' + hue + ', 60%, 40%)';
   }
 
   function schedule(pgn, days) {
@@ -408,7 +448,7 @@
   const nextMoves = []
 
   function onDownKey(event) {
-    game.history({verbose: true}).reverse().forEach(m => nextMoves.unshift(m))
+    game.history({ verbose: true }).reverse().forEach(m => nextMoves.unshift(m))
     game.reset()
     updateUI(false)
   }
