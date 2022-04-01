@@ -332,6 +332,7 @@
     return `<td style='min-width: 5rem; background:${color}'>${perc}</td>`
   }
 
+  function percentageToHsl(percentage, hue0 = 0, hue1 = 120) {
     var hue = (percentage * (hue1 - hue0)) + hue0;
     return 'hsl(' + hue + ', 60%, 40%)';
   }
