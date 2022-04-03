@@ -208,10 +208,12 @@
       firstMove = puzzle.Moves.split(" ")[0],
       fromSq = firstMove.slice(0, 2),
       toSq = firstMove.slice(2, 4)
+
     board.position(puzzle.FEN, false)
-    board.move(fromSq + '-' + toSq)
     game.load(puzzle.FEN)
     game.move(firstMove, { sloppy: true })
+    board.position(game.fen())
+
     moves = game.moves({ verbose: true })
     checks = moves.filter(m => m.san.search(/[#\+]$/) > 0)
     captures = moves.filter(m => m.san.indexOf('x') > 0)
