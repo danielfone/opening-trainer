@@ -30,8 +30,10 @@
     }
 
     img {
+      touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     #status {
@@ -56,13 +58,17 @@
       margin: 1rem;
     }
 
+    #controls button {
+      touch-action: manipulation;
+    }
+
     .highlight1-32417,
     .highlight2-9c5d2 {
       box-shadow: none;
     }
 
     .highlight2-9c5d2 {
-      border: 2px solid #5557;
+      border: 2px solid yellow;
       box-sizing: border-box;
     }
 
@@ -79,11 +85,11 @@
 </head>
 
 <body>
+  <div id="status" class="loading">Loading</div>
+  <div id="board"></div>
   <div id="score" class="has-text-centered">
     <div class="is-size-4 has-text-weight-bold" id="accuracy">-</div>
   </div>
-  <div id="board"></div>
-  <div id="status" class="loading">Loading</div>
   <div id="controls" class="level">
     <div class="level-item buttons">
       <button class="button is-info-outline is-large is-fullwidth js-done">Done</button>
@@ -150,18 +156,16 @@
 
     const time = (performance.now() - startTime) / 1000
     const rate = time / (targets.length + 1)
-    // TODO: account for mistakes
-    const percent = targets.length > 0 ? found.size / targets.length : 1
     const missed = targets.filter(c => !found.has(c)).map(m => m.san)
 
     // Update UI
     renderAccuracy()
     $status.removeClass()
-    $status.addClass(percent == 1 ? 'has-background-success has-text-black-bis' : 'has-background-warning has-text-black-bis')
+    $status.addClass(missed.length == 0 ? 'has-background-success has-text-black-bis' : 'has-background-warning has-text-black-bis')
 
     if (missed.length > 0) {
       $status.html(`
-        <span class="is-size-3 mr-3">${percent.toLocaleString(undefined, { style: 'percent' })}</span>
+        <span class="is-size-3 mr-3">${found.size}&frasl;${targets.length}</span>
         <span class="mr-3">Missed: ${missed.join(', ')}</span>
       `)
     } else {
@@ -208,10 +212,12 @@
       firstMove = puzzle.Moves.split(" ")[0],
       fromSq = firstMove.slice(0, 2),
       toSq = firstMove.slice(2, 4)
+
     board.position(puzzle.FEN, false)
-    board.move(fromSq + '-' + toSq)
     game.load(puzzle.FEN)
     game.move(firstMove, { sloppy: true })
+    board.position(game.fen())
+
     moves = game.moves({ verbose: true })
     checks = moves.filter(m => m.san.search(/[#\+]$/) > 0)
     captures = moves.filter(m => m.san.indexOf('x') > 0)
@@ -259,6 +265,7 @@
   loadPosition()
 
   window.onresize = () => board.resize()
+
 </script>
 
 </html>
