@@ -29,7 +29,8 @@
       background-color: #F3E469;
     }
 
-    .highlight1-32417, .highlight2-9c5d2 {
+    .highlight1-32417,
+    .highlight2-9c5d2 {
       box-shadow: none;
     }
 
@@ -207,7 +208,7 @@
     const threshold = +inputs.threshold.value
     const candidates = book.moves.filter(m => m.percentage > threshold)
 
-    console.debug({candidates})
+    console.debug({ candidates })
     if (book.games == 0) {
       $status.text('Out of book!')
       return
@@ -436,7 +437,14 @@
   })
 
   $('.js-review').click(async () => {
-    const schedule = Object.values(positionSchedule).sort((s1, s2) => s1.date - s2.date)[0]
+    const today = (new Date()).setHours(0, 0, 0, 0)
+    const positionsDueToday = Object
+      .values(positionSchedule)
+      .filter(s => (new Date(s.date)).setHours(0, 0, 0, 0) <= today)
+      .sort((s1, s2) => s1.pgn.localeCompare(s2.pgn))
+    console.debug(positionsDueToday.map(p => p.pgn))
+    // Group today's review by PGN
+    const schedule = positionsDueToday[0]
     console.log("Reviewing", schedule)
     resetGame()
     game.load_pgn(schedule.pgn)
